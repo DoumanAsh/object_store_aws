@@ -208,7 +208,7 @@ impl HttpService for AwsSmithyHttpClient {
 pub struct DummyAuth;
 
 impl DummyAuth {
-    const AUTH_SCHEMA: AuthSchemeId = AuthSchemeId::new("noAuth");
+    pub(crate) const AUTH_SCHEMA: AuthSchemeId = AuthSchemeId::new("noAuth");
     const AUTH_SCHEMAS: &'static [AuthSchemeId] = &[Self::AUTH_SCHEMA];
 }
 
@@ -220,6 +220,37 @@ impl ResolveAuthSchemeOptions for DummyAuth {
     #[inline(always)]
     fn resolve_auth_scheme_options_v2<'a>(&'a self, _params: &'a AuthSchemeOptionResolverParams, _cfg: &'a aws_smithy_types::config_bag::ConfigBag, _runtime_components: &'a RuntimeComponents) -> AuthSchemeOptionsFuture<'a> {
         AuthSchemeOptionsFuture::ready(Ok(vec![Self::AUTH_SCHEMA.into()]))
+    }
+}
+
+impl aws_smithy_runtime_api::client::auth::AuthScheme for DummyAuth {
+    #[inline(always)]
+    fn signer(&self) -> &dyn aws_smithy_runtime_api::client::auth::Sign {
+        self
+    }
+    #[inline(always)]
+    fn scheme_id(&self) -> AuthSchemeId {
+        Self::AUTH_SCHEMA
+    }
+    #[inline(always)]
+    fn identity_resolver(&self, _: &dyn aws_smithy_runtime_api::client::runtime_components::GetIdentityResolver) -> Option<aws_smithy_runtime_api::client::identity::SharedIdentityResolver> {
+        None
+    }
+}
+
+impl aws_smithy_runtime_api::client::auth::Sign for DummyAuth {
+    #[inline(always)]
+    fn sign_http_request(&self, _: &mut aws_smithy_runtime_api::client::orchestrator::HttpRequest, _: &aws_smithy_runtime_api::client::identity::Identity, _: aws_smithy_runtime_api::client::auth::AuthSchemeEndpointConfig<'_>, _: &RuntimeComponents, _: &aws_smithy_types::config_bag::ConfigBag) -> Result<(), aws_smithy_runtime_api::box_error::BoxError> {
+        Ok(())
+
+    }
+}
+
+impl aws_smithy_runtime_api::client::identity::ResolveIdentity for DummyAuth {
+    #[inline(always)]
+    fn resolve_identity<'a>(&'a self, _: &'a RuntimeComponents, _: &'a aws_smithy_types::config_bag::ConfigBag) -> aws_smithy_runtime_api::client::identity::IdentityFuture<'a> {
+        let identity = aws_smithy_runtime_api::client::identity::Identity::new((), None);
+        aws_smithy_runtime_api::client::identity::IdentityFuture::ready(Ok(identity))
     }
 }
 

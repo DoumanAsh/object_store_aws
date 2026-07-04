@@ -98,6 +98,8 @@ impl AwsCredentials {
                                                   .with_auth_scheme_option_resolver(Some(http::DummyAuth))
                                                   .with_retry_strategy(Some(http::DummyRetryStrategy))
                                                   .with_endpoint_resolver(Some(http::DummyResolveEndpoint))
+                                                  .with_auth_scheme(http::DummyAuth)
+                                                  .with_identity_resolver(http::DummyAuth::AUTH_SCHEMA, http::DummyAuth)
                                                   .build()
                                                   .map(|components| http_client.map(|http_client| http::AwsSmithyHttpConnector::new(http_client, components)))
 
