@@ -1,6 +1,6 @@
 [package]
 name = "object_store_aws"
-version = "0.13.0"
+version = "0.13.1"
 edition = "2024"
 rust-version = "1.88"
 description = "Object store extension for AWS cloud"
@@ -22,6 +22,7 @@ features = ["cloud", "aws"]
 [dependencies.aws-config]
 version = "1.8"
 default-features = false
+features = ["rt-tokio"]
 
 [dependencies.aws-credential-types]
 version = "1"
