@@ -1,6 +1,6 @@
 [package]
 name = "object_store_aws"
-version = "0.13.1"
+version = "0.13.2"
 edition = "2024"
 rust-version = "1.88"
 description = "Object store extension for AWS cloud"
@@ -14,6 +14,11 @@ include = [
     "README.md"
 ]
 
+[dependencies.tokio]
+version = "1"
+default-features = false
+features = ["sync"]
+
 [dependencies.object_store]
 version = "0.13"
 default-features = false
@@ -22,7 +27,7 @@ features = ["cloud", "aws"]
 [dependencies.aws-config]
 version = "1.8"
 default-features = false
-features = ["rt-tokio"]
+features = ["rt-tokio", "credentials-process", "behavior-version-latest"]
 
 [dependencies.aws-credential-types]
 version = "1"
@@ -51,7 +56,7 @@ default-features = false
 ring = ["aws-smithy-http-client/rustls-ring"]
 aws-lc = ["aws-smithy-http-client/rustls-aws-lc"]
 aws-lc-fips = ["aws-smithy-http-client/rustls-aws-lc-fips"]
-sso = ["aws-config/sso"]
+sso = ["aws-config/sso", "aws-config/credentials-login"]
 
 [lints.rust]
 missing_docs = "warn"

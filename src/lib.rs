@@ -10,6 +10,7 @@ pub use object_store::aws::AmazonS3Builder;
 pub use aws_config;
 pub use aws_credential_types::provider::error::CredentialsError;
 use aws_credential_types::provider::ProvideCredentials;
+use tokio::sync::RwLock;
 
 pub mod http;
 
@@ -30,7 +31,10 @@ impl fmt::Display for Error {
         match self {
             Self::MissingCredentials => fmt.write_str("Credential provider is not available with current AWS config"),
             Self::MissingRegion => fmt.write_str("AWS Config is missing region"),
-            Self::CredentialsError(error) => fmt.write_fmt(format_args!("AWS error getting credentials: {error}")),
+            Self::CredentialsError(error) => match std::error::Error::source(&error) {
+                Some(source) => fmt.write_fmt(format_args!("AWS error getting credentials: {error}({source})")),
+                None => fmt.write_fmt(format_args!("AWS error getting credentials: {error}")),
+            }
         }
     }
 }
@@ -45,11 +49,12 @@ impl std::error::Error for Error {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 ///AWS credentials provided by [aws-config](https://docs.rs/aws-config/1.8.18/aws_config/struct.SdkConfig.html#method.credentials_provider)
 pub struct AwsCredentials {
     region: aws_config::Region,
-    creds: aws_credential_types::provider::SharedCredentialsProvider,
+    provider: aws_credential_types::provider::SharedCredentialsProvider,
+    creds: RwLock<aws_credential_types::Credentials>,
     config: aws_config::SdkConfig,
 }
 
@@ -90,19 +95,38 @@ impl AwsCredentials {
 impl object_store::CredentialProvider for AwsCredentials {
     type Credential = object_store::aws::AwsCredential;
     fn get_credential<'life0,'async_trait>(&'life0 self) -> Pin<Box<dyn Future<Output = object_store::Result<Arc<Self::Credential>>> + Send + 'async_trait>> where 'life0: 'async_trait, Self:'async_trait {
-        let result = self.creds.provide_credentials();
         Box::pin(async {
-            match result.await {
-                Ok(creds) => Ok(Arc::new(Self::Credential {
-                    key_id: creds.access_key_id().to_owned(),
-                    secret_key: creds.secret_access_key().to_owned(),
-                    token: creds.session_token().map(|val| val.to_owned())
-                })),
-                Err(error) => Err(object_store::Error::Generic {
-                    store: "S3",
-                    source: Box::new(error),
-                })
-            }
+            let current_creds = self.creds.read().await;
+            let creds = if current_creds.expiry().and_then(|expiry| expiry.elapsed().ok()).is_some() {
+                //If credentials expired, allow to refresh it
+                drop(current_creds);
+                match self.provider.provide_credentials().await {
+                    Ok(creds) => {
+                        let result = Self::Credential {
+                            key_id: creds.access_key_id().to_owned(),
+                            secret_key: creds.secret_access_key().to_owned(),
+                            token: creds.session_token().map(|val| val.to_owned())
+                        };
+                        *self.creds.write().await = creds;
+                        result
+                    },
+                    Err(error) => {
+                        return Err(object_store::Error::Generic {
+                            store: "S3",
+                            source: Box::new(error),
+                        })
+                    }
+
+                }
+            } else {
+                Self::Credential {
+                    key_id: current_creds.access_key_id().to_owned(),
+                    secret_key: current_creds.secret_access_key().to_owned(),
+                    token: current_creds.session_token().map(|val| val.to_owned())
+                }
+            };
+
+            Ok(Arc::new(creds))
         })
     }
 }
@@ -122,16 +146,16 @@ pub async fn init(_http_builder: Option<&http::Builder>) -> Result<AwsCredential
                                                                    .max_backoff(core::time::Duration::from_secs(60))
                                                                    .build();
     #[allow(unused_mut)]
-    let mut config = aws_config::ConfigLoader::default().behavior_version(aws_config::BehaviorVersion::latest()).retry_config(retry_config);
+    let mut config = aws_config::from_env().behavior_version(aws_config::BehaviorVersion::latest()).retry_config(retry_config);
     #[cfg(any(feature = "ring", feature = "aws-lc", feature = "aws-lc-fips"))]
     if let Some(http_client) = http_client {
         config = config.http_client(http_client);
     }
     let config = config.load().await;
 
-    let creds = match config.credentials_provider() {
-        Some(creds) => match creds.provide_credentials().await {
-            Ok(_) => creds,
+    let (creds, provider) = match config.credentials_provider() {
+        Some(provider) => match provider.provide_credentials().await {
+            Ok(creds) => (RwLock::new(creds), provider),
             Err(CredentialsError::CredentialsNotLoaded(_)) => return Err(Error::MissingCredentials),
             Err(error) => return Err(Error::CredentialsError(error)),
         },
@@ -146,5 +170,6 @@ pub async fn init(_http_builder: Option<&http::Builder>) -> Result<AwsCredential
         config,
         region,
         creds,
+        provider,
     })
 }
