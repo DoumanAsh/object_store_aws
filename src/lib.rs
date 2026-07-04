@@ -10,9 +10,17 @@ pub use object_store::aws::AmazonS3Builder;
 pub use aws_config;
 pub use aws_credential_types::provider::error::CredentialsError;
 use aws_credential_types::provider::ProvideCredentials;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, Semaphore};
 
 pub mod http;
+
+fn extract_object_store_aws_creds(creds: &aws_credential_types::Credentials) -> object_store::aws::AwsCredential {
+    object_store::aws::AwsCredential {
+        key_id: creds.access_key_id().to_owned(),
+        secret_key: creds.secret_access_key().to_owned(),
+        token: creds.session_token().map(|val| val.to_owned())
+    }
+}
 
 #[derive(Debug)]
 ///Credential errors
@@ -56,6 +64,7 @@ pub struct AwsCredentials {
     provider: aws_credential_types::provider::SharedCredentialsProvider,
     creds: RwLock<aws_credential_types::Credentials>,
     config: aws_config::SdkConfig,
+    semka: Semaphore,
 }
 
 impl AwsCredentials {
@@ -101,30 +110,31 @@ impl object_store::CredentialProvider for AwsCredentials {
             let creds = if current_creds.expiry().and_then(|expiry| expiry.elapsed().ok()).is_some() {
                 //If credentials expired, allow to refresh it
                 drop(current_creds);
-                match self.provider.provide_credentials().await {
-                    Ok(creds) => {
-                        let result = Self::Credential {
-                            key_id: creds.access_key_id().to_owned(),
-                            secret_key: creds.secret_access_key().to_owned(),
-                            token: creds.session_token().map(|val| val.to_owned())
-                        };
-                        *self.creds.write().await = creds;
-                        result
-                    },
-                    Err(error) => {
-                        return Err(object_store::Error::Generic {
-                            store: "S3",
-                            source: Box::new(error),
-                        })
-                    }
+                if let Ok(_permit) = self.semka.try_acquire() {
+                    //Ensure only one task tries to refresh tokens
+                    let mut current_creds = self.creds.write().await;
+                    match self.provider.provide_credentials().await {
+                        Ok(creds) => {
+                            let result = extract_object_store_aws_creds(&creds);
+                            *current_creds = creds;
+                            result
+                        },
+                        Err(error) => {
+                            return Err(object_store::Error::Generic {
+                                store: "S3",
+                                source: Box::new(error),
+                            })
+                        }
 
+                    }
+                } else {
+                    //Await writer to update credentials before fetching it
+                    tokio::task::yield_now().await;
+                    let current_creds = self.creds.read().await;
+                    extract_object_store_aws_creds(&current_creds)
                 }
             } else {
-                Self::Credential {
-                    key_id: current_creds.access_key_id().to_owned(),
-                    secret_key: current_creds.secret_access_key().to_owned(),
-                    token: current_creds.session_token().map(|val| val.to_owned())
-                }
+                extract_object_store_aws_creds(&current_creds)
             };
 
             Ok(Arc::new(creds))
@@ -172,5 +182,6 @@ pub async fn init(_http_builder: Option<&http::Builder>) -> Result<AwsCredential
         region,
         creds,
         provider,
+        semka: Semaphore::new(1),
     })
 }
