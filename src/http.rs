@@ -3,6 +3,7 @@
 use core::{fmt, mem, time};
 use core::pin::Pin;
 use core::future::{self, Future};
+use std::borrow::Cow;
 
 pub use object_store::client::{HttpClient, HttpConnector, HttpService, HttpRequest, HttpRequestBody, HttpResponse, HttpResponseBody, HttpError, HttpErrorKind};
 pub use aws_smithy_runtime_api::client::http::HttpClient as AwsHttpClient;
@@ -10,6 +11,7 @@ pub use aws_smithy_runtime_api::client::http::HttpConnector as AwsHttpConnector;
 pub use aws_smithy_runtime_api::client::http::SharedHttpClient as AwsSharedHttpClient;
 pub use aws_smithy_runtime_api::client::http::SharedHttpConnector as AwsSharedHttpConnector;
 pub use aws_smithy_runtime_api::client::runtime_components::RuntimeComponents;
+pub use aws_smithy_runtime_api::client::auth::{ResolveAuthSchemeOptions, AuthSchemeOptionResolverParams, AuthSchemeId, AuthSchemeOption, AuthSchemeOptionsFuture};
 
 //It is common for ALB to have limited time for idle connections so adjust pool time to the same limit
 //Default keep alive is too long to keep this connection alive so there is no sense in keeping it for longer than 3 minutes
@@ -195,5 +197,24 @@ impl HttpService for AwsSmithyHttpClient {
             }),
             Err(error) => Box::pin(future::ready(Err(HttpError::new(HttpErrorKind::Request, error))))
         }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+///Dummy implementation of [ResolveAuthSchemeOptions]
+pub struct DummyAuth;
+
+impl DummyAuth {
+    const AUTH_SCHEMA: AuthSchemeId = AuthSchemeId::new("noAuth");
+    const AUTH_SCHEMAS: &'static [AuthSchemeId] = &[Self::AUTH_SCHEMA];
+}
+
+impl ResolveAuthSchemeOptions for DummyAuth {
+    #[inline(always)]
+    fn resolve_auth_scheme_options(&self, _params: &AuthSchemeOptionResolverParams) -> Result<std::borrow::Cow<'_, [AuthSchemeId]>, aws_smithy_runtime_api::box_error::BoxError> {
+        Ok(Cow::Borrowed(Self::AUTH_SCHEMAS))
+    }
+    fn resolve_auth_scheme_options_v2<'a>(&'a self, _params: &'a AuthSchemeOptionResolverParams, _cfg: &'a aws_smithy_types::config_bag::ConfigBag, _runtime_components: &'a RuntimeComponents) -> AuthSchemeOptionsFuture<'a> {
+        AuthSchemeOptionsFuture::ready(Ok(vec![Self::AUTH_SCHEMA.into()]))
     }
 }

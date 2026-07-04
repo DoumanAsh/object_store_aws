@@ -86,6 +86,7 @@ impl AwsCredentials {
         let http_client = self.config.http_client().clone();
         RuntimeComponents::builder("object-store").with_time_source(self.config.time_source())
                                                   .with_sleep_impl(self.config.sleep_impl())
+                                                  .with_auth_scheme_option_resolver(Some(http::DummyAuth))
                                                   .build()
                                                   .map(|components| http_client.map(|http_client| http::AwsSmithyHttpConnector::new(http_client, components)))
 
