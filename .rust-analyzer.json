@@ -1,0 +1,9 @@
+{
+    "cargo": {
+        "features": [
+            "ring",
+            "aws-lc",
+            "aws-lc-fips"
+        ]
+    }
+}

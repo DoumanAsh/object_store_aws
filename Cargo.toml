@@ -1,0 +1,62 @@
+[package]
+name = "object_store_aws"
+version = "0.13.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Object store extension for AWS cloud"
+readme = "README.md"
+repository = "https://github.com/DoumanAsh/object_store_aws"
+license = "BSL-1.0"
+keywords = ["object_store", "AWS"]
+include = [
+    "**/*.rs",
+    "Cargo.toml",
+    "README.md"
+]
+
+[dependencies.object_store]
+version = "0.13"
+default-features = false
+features = ["cloud", "aws"]
+
+[dependencies.aws-config]
+version = "1.8"
+default-features = false
+
+[dependencies.aws-credential-types]
+version = "1"
+default-features = false
+
+[dependencies.aws-smithy-http-client]
+version = "1.1"
+default-features = false
+features = ["default-client"]
+
+[dependencies.aws-smithy-runtime-api]
+version = "1"
+default-features = false
+features = ["http-1x"]
+
+[dependencies.aws-smithy-types]
+version = "1"
+default-features = false
+features = ["http-body-1-x"]
+
+[dependencies.http-body-util]
+version = "0.1"
+default-features = false
+
+[features]
+ring = ["aws-smithy-http-client/rustls-ring"]
+aws-lc = ["aws-smithy-http-client/rustls-aws-lc"]
+aws-lc-fips = ["aws-smithy-http-client/rustls-aws-lc-fips"]
+sso = ["aws-config/sso"]
+
+[lints.rust]
+missing_docs = "warn"
+
+[lints.clippy]
+style = "allow"
+
+[package.metadata.docs.rs]
+features = ["ring", "aws-lc", "aws-lc-fips"]
