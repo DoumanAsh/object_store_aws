@@ -12,6 +12,9 @@ pub use aws_smithy_runtime_api::client::http::SharedHttpClient as AwsSharedHttpC
 pub use aws_smithy_runtime_api::client::http::SharedHttpConnector as AwsSharedHttpConnector;
 pub use aws_smithy_runtime_api::client::runtime_components::RuntimeComponents;
 pub use aws_smithy_runtime_api::client::auth::{ResolveAuthSchemeOptions, AuthSchemeOptionResolverParams, AuthSchemeId, AuthSchemeOption, AuthSchemeOptionsFuture};
+pub use aws_smithy_runtime_api::client::retries::RetryStrategy;
+pub use aws_smithy_runtime_api::client::endpoint::ResolveEndpoint;
+use aws_smithy_types::endpoint::Endpoint;
 
 //It is common for ALB to have limited time for idle connections so adjust pool time to the same limit
 //Default keep alive is too long to keep this connection alive so there is no sense in keeping it for longer than 3 minutes
@@ -214,7 +217,40 @@ impl ResolveAuthSchemeOptions for DummyAuth {
     fn resolve_auth_scheme_options(&self, _params: &AuthSchemeOptionResolverParams) -> Result<std::borrow::Cow<'_, [AuthSchemeId]>, aws_smithy_runtime_api::box_error::BoxError> {
         Ok(Cow::Borrowed(Self::AUTH_SCHEMAS))
     }
+    #[inline(always)]
     fn resolve_auth_scheme_options_v2<'a>(&'a self, _params: &'a AuthSchemeOptionResolverParams, _cfg: &'a aws_smithy_types::config_bag::ConfigBag, _runtime_components: &'a RuntimeComponents) -> AuthSchemeOptionsFuture<'a> {
         AuthSchemeOptionsFuture::ready(Ok(vec![Self::AUTH_SCHEMA.into()]))
     }
 }
+
+#[derive(Debug, Copy, Clone)]
+///Dummy implementation of [RetryStrategy]
+pub struct DummyRetryStrategy;
+
+impl RetryStrategy for DummyRetryStrategy {
+    #[inline(always)]
+    fn should_attempt_retry(&self, _: &aws_smithy_runtime_api::client::interceptors::context::InterceptorContext, _: &RuntimeComponents, _: &aws_smithy_types::config_bag::ConfigBag) -> Result<aws_smithy_runtime_api::client::retries::ShouldAttempt, aws_smithy_runtime_api::box_error::BoxError> {
+        Ok(aws_smithy_runtime_api::client::retries::ShouldAttempt::No)
+    }
+    #[inline(always)]
+    fn should_attempt_initial_request(&self, _: &RuntimeComponents, _: &aws_smithy_types::config_bag::ConfigBag) -> Result<aws_smithy_runtime_api::client::retries::ShouldAttempt, aws_smithy_runtime_api::box_error::BoxError> {
+        Ok(aws_smithy_runtime_api::client::retries::ShouldAttempt::No)
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+///Dummy implementation of [ResolveEndpoint]
+pub struct DummyResolveEndpoint;
+
+impl ResolveEndpoint for DummyResolveEndpoint {
+    #[inline(always)]
+    fn resolve_endpoint<'a>(&'a self, _: &'a aws_smithy_runtime_api::client::endpoint::EndpointResolverParams) -> aws_smithy_runtime_api::client::endpoint::EndpointFuture<'a> {
+        let endpoint = Endpoint::builder().url("https://s3.us-east-1.amazonaws.com").build();
+        aws_smithy_runtime_api::client::endpoint::EndpointFuture::new(future::ready(Ok(endpoint)))
+    }
+    #[inline(always)]
+    fn finalize_params<'a>(&'a self, _: &'a mut aws_smithy_runtime_api::client::endpoint::EndpointResolverParams) -> Result<(), aws_smithy_runtime_api::box_error::BoxError> {
+        Ok(())
+    }
+}
+

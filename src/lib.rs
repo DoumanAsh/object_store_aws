@@ -96,6 +96,8 @@ impl AwsCredentials {
         RuntimeComponents::builder("object-store").with_time_source(self.config.time_source())
                                                   .with_sleep_impl(self.config.sleep_impl())
                                                   .with_auth_scheme_option_resolver(Some(http::DummyAuth))
+                                                  .with_retry_strategy(Some(http::DummyRetryStrategy))
+                                                  .with_endpoint_resolver(Some(http::DummyResolveEndpoint))
                                                   .build()
                                                   .map(|components| http_client.map(|http_client| http::AwsSmithyHttpConnector::new(http_client, components)))
 
