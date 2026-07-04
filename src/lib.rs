@@ -93,6 +93,7 @@ impl AwsCredentials {
         use aws_smithy_runtime_api::client::runtime_components::RuntimeComponents;
 
         let http_client = self.config.http_client().clone();
+        //Imagine being so smart that you make it impossible to create simple HTTP client...
         RuntimeComponents::builder("object-store").with_time_source(self.config.time_source())
                                                   .with_sleep_impl(self.config.sleep_impl())
                                                   .with_auth_scheme_option_resolver(Some(http::DummyAuth))
@@ -100,6 +101,7 @@ impl AwsCredentials {
                                                   .with_endpoint_resolver(Some(http::DummyResolveEndpoint))
                                                   .with_auth_scheme(http::DummyAuth)
                                                   .with_identity_resolver(http::DummyAuth::AUTH_SCHEMA, http::DummyAuth)
+                                                  .with_identity_cache(Some(http::DummyAuth))
                                                   .build()
                                                   .map(|components| http_client.map(|http_client| http::AwsSmithyHttpConnector::new(http_client, components)))
 

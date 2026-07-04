@@ -254,6 +254,13 @@ impl aws_smithy_runtime_api::client::identity::ResolveIdentity for DummyAuth {
     }
 }
 
+impl aws_smithy_runtime_api::client::identity::ResolveCachedIdentity for DummyAuth {
+    fn resolve_cached_identity<'a>(&'a self, _: aws_smithy_runtime_api::client::identity::SharedIdentityResolver, _: &'a RuntimeComponents, _: &'a aws_smithy_types::config_bag::ConfigBag) -> aws_smithy_runtime_api::client::identity::IdentityFuture<'a> {
+        let identity = aws_smithy_runtime_api::client::identity::Identity::new((), None);
+        aws_smithy_runtime_api::client::identity::IdentityFuture::ready(Ok(identity))
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 ///Dummy implementation of [RetryStrategy]
 pub struct DummyRetryStrategy;
