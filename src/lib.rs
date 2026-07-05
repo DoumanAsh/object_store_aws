@@ -151,6 +151,21 @@ impl object_store::CredentialProvider for AwsCredentials {
                             *current_creds = creds;
                             result
                         },
+                        //On timeout we can check available fallback, if it is present, we can use
+                        //it safely as these should be viable credentials (so as long as implementation is correct)
+                        Err(error @ CredentialsError::ProviderTimedOut(_)) => match self.provider.fallback_on_interrupt() {
+                            Some(creds) => {
+                                let result = extract_object_store_aws_creds(&creds);
+                                *current_creds = creds;
+                                result
+                            },
+                            None => {
+                                return Err(object_store::Error::Generic {
+                                    store: "S3",
+                                    source: Box::new(error),
+                                })
+                            }
+                        },
                         Err(error) => {
                             return Err(object_store::Error::Generic {
                                 store: "S3",
