@@ -52,14 +52,19 @@ features = ["http-body-1-x"]
 version = "0.1"
 default-features = false
 
+[dev-dependencies.tokio]
+version = "1"
+features = ["rt", "macros"]
+
+[dev-dependencies.aws-config]
+version = "1"
+features = ["test-util"]
+
 [features]
 ring = ["aws-smithy-http-client/rustls-ring"]
 aws-lc = ["aws-smithy-http-client/rustls-aws-lc"]
 aws-lc-fips = ["aws-smithy-http-client/rustls-aws-lc-fips"]
 sso = ["aws-config/sso", "aws-config/credentials-login"]
-
-[lints.rust]
-missing_docs = "warn"
 
 [lints.clippy]
 style = "allow"

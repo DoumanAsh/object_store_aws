@@ -1,4 +1,5 @@
 #![doc = include_str!("../README.md")]
+#![warn(missing_docs)]
 
 use std::sync::Arc;
 use core::fmt;
@@ -68,6 +69,31 @@ pub struct AwsCredentials {
 }
 
 impl AwsCredentials {
+    ///Initializes [AwsCredentials] from [aws_config::SdkConfig]
+    pub async fn from_config(config: aws_config::SdkConfig) -> Result<Self, Error> {
+        let region = match config.region() {
+            Some(region) => region.clone(),
+            None => return Err(Error::MissingRegion),
+        };
+        let (creds, provider) = match config.credentials_provider() {
+            Some(provider) => match provider.provide_credentials().await {
+                Ok(creds) => (RwLock::new(creds), provider),
+                Err(CredentialsError::CredentialsNotLoaded(_)) => return Err(Error::MissingCredentials),
+                Err(error) => return Err(Error::CredentialsError(error)),
+            },
+            None => return Err(Error::MissingCredentials),
+        };
+
+        Ok(AwsCredentials {
+            config,
+            region,
+            creds,
+            provider,
+            semka: Semaphore::new(1),
+        })
+
+    }
+
     #[inline]
     ///Returns region configured during credentials initialization
     pub const fn region(&self) -> &aws_config::Region {
@@ -131,7 +157,6 @@ impl object_store::CredentialProvider for AwsCredentials {
                                 source: Box::new(error),
                             })
                         }
-
                     }
                 } else {
                     //Await writer to update credentials before fetching it
@@ -170,24 +195,5 @@ pub async fn init(_http_builder: Option<&http::Builder>) -> Result<AwsCredential
     }
     let config = config.load().await;
 
-    let (creds, provider) = match config.credentials_provider() {
-        Some(provider) => match provider.provide_credentials().await {
-            Ok(creds) => (RwLock::new(creds), provider),
-            Err(CredentialsError::CredentialsNotLoaded(_)) => return Err(Error::MissingCredentials),
-            Err(error) => return Err(Error::CredentialsError(error)),
-        },
-        None => return Err(Error::MissingCredentials),
-    };
-    let region = match config.region() {
-        Some(region) => region.clone(),
-        None => return Err(Error::MissingRegion),
-    };
-
-    Ok(AwsCredentials {
-        config,
-        region,
-        creds,
-        provider,
-        semka: Semaphore::new(1),
-    })
+    AwsCredentials::from_config(config).await
 }
