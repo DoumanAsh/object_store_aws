@@ -11,17 +11,9 @@ pub use object_store::aws::AmazonS3Builder;
 pub use aws_config;
 pub use aws_credential_types::provider::error::CredentialsError;
 use aws_credential_types::provider::ProvideCredentials;
-use tokio::sync::{RwLock, Semaphore};
+use tokio::sync::RwLock;
 
 pub mod http;
-
-fn extract_object_store_aws_creds(creds: &aws_credential_types::Credentials) -> object_store::aws::AwsCredential {
-    object_store::aws::AwsCredential {
-        key_id: creds.access_key_id().to_owned(),
-        secret_key: creds.secret_access_key().to_owned(),
-        token: creds.session_token().map(|val| val.to_owned())
-    }
-}
 
 #[derive(Debug)]
 ///Credential errors
@@ -59,13 +51,32 @@ impl std::error::Error for Error {
 }
 
 #[derive(Debug)]
+struct CredentialsData {
+    expiry: Option<std::time::SystemTime>,
+    data: Arc<object_store::aws::AwsCredential>,
+}
+
+impl CredentialsData {
+    #[inline(always)]
+    pub fn from_aws_credential_types(creds: &aws_credential_types::Credentials) -> Self {
+        Self {
+            expiry: creds.expiry(),
+            data: Arc::new(object_store::aws::AwsCredential {
+                key_id: creds.access_key_id().to_owned(),
+                secret_key: creds.secret_access_key().to_owned(),
+                token: creds.session_token().map(|val| val.to_owned())
+            }),
+        }
+    }
+}
+
+#[derive(Debug)]
 ///AWS credentials provided by [aws-config](https://docs.rs/aws-config/1.8.18/aws_config/struct.SdkConfig.html#method.credentials_provider)
 pub struct AwsCredentials {
     region: aws_config::Region,
     provider: aws_credential_types::provider::SharedCredentialsProvider,
-    creds: RwLock<aws_credential_types::Credentials>,
+    credentials: RwLock<CredentialsData>,
     config: aws_config::SdkConfig,
-    semka: Semaphore,
 }
 
 impl AwsCredentials {
@@ -77,7 +88,7 @@ impl AwsCredentials {
         };
         let (creds, provider) = match config.credentials_provider() {
             Some(provider) => match provider.provide_credentials().await {
-                Ok(creds) => (RwLock::new(creds), provider),
+                Ok(creds) => (creds, provider),
                 Err(CredentialsError::CredentialsNotLoaded(_)) => return Err(Error::MissingCredentials),
                 Err(error) => return Err(Error::CredentialsError(error)),
             },
@@ -87,9 +98,8 @@ impl AwsCredentials {
         Ok(AwsCredentials {
             config,
             region,
-            creds,
+            credentials: RwLock::new(CredentialsData::from_aws_credential_types(&creds)),
             provider,
-            semka: Semaphore::new(1),
         })
 
     }
@@ -138,25 +148,28 @@ impl object_store::CredentialProvider for AwsCredentials {
     type Credential = object_store::aws::AwsCredential;
     fn get_credential<'life0,'async_trait>(&'life0 self) -> Pin<Box<dyn Future<Output = object_store::Result<Arc<Self::Credential>>> + Send + 'async_trait>> where 'life0: 'async_trait, Self:'async_trait {
         Box::pin(async {
-            let current_creds = self.creds.read().await;
-            let creds = if current_creds.expiry().and_then(|expiry| expiry.elapsed().ok()).is_some() {
+            let current_creds = self.credentials.read().await;
+            let creds = if current_creds.expiry.and_then(|expiry| expiry.elapsed().ok()).is_some() {
                 //If credentials expired, allow to refresh it
                 drop(current_creds);
-                if let Ok(_permit) = self.semka.try_acquire() {
-                    //Ensure only one task tries to refresh tokens
-                    let mut current_creds = self.creds.write().await;
+                let mut current_creds = self.credentials.write().await;
+                //In worst case few threads will be concurrently stuck here so verify expiration
+                //again to prevent multiple fetches of credentials (or re-try if you weren't able to update it in previous writer)
+                if current_creds.expiry.and_then(|expiry| expiry.elapsed().ok()).is_some() {
                     match self.provider.provide_credentials().await {
                         Ok(creds) => {
-                            let result = extract_object_store_aws_creds(&creds);
-                            *current_creds = creds;
+                            let new_creds = CredentialsData::from_aws_credential_types(&creds);
+                            let result = new_creds.data.clone();
+                            *current_creds = new_creds;
                             result
                         },
                         //On timeout we can check available fallback, if it is present, we can use
                         //it safely as these should be viable credentials (so as long as implementation is correct)
                         Err(error @ CredentialsError::ProviderTimedOut(_)) => match self.provider.fallback_on_interrupt() {
                             Some(creds) => {
-                                let result = extract_object_store_aws_creds(&creds);
-                                *current_creds = creds;
+                                let new_creds = CredentialsData::from_aws_credential_types(&creds);
+                                let result = new_creds.data.clone();
+                                *current_creds = new_creds;
                                 result
                             },
                             None => {
@@ -174,16 +187,13 @@ impl object_store::CredentialProvider for AwsCredentials {
                         }
                     }
                 } else {
-                    //Await writer to update credentials before fetching it
-                    tokio::task::yield_now().await;
-                    let current_creds = self.creds.read().await;
-                    extract_object_store_aws_creds(&current_creds)
+                    current_creds.data.clone()
                 }
             } else {
-                extract_object_store_aws_creds(&current_creds)
+                current_creds.data.clone()
             };
 
-            Ok(Arc::new(creds))
+            Ok(creds)
         })
     }
 }
