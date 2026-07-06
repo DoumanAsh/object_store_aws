@@ -147,7 +147,7 @@ impl AwsCredentials {
 impl object_store::CredentialProvider for AwsCredentials {
     type Credential = object_store::aws::AwsCredential;
     fn get_credential<'life0,'async_trait>(&'life0 self) -> Pin<Box<dyn Future<Output = object_store::Result<Arc<Self::Credential>>> + Send + 'async_trait>> where 'life0: 'async_trait, Self:'async_trait {
-        Box::pin(async {
+        let get_credential = async {
             let current_creds = self.credentials.read().await;
             let creds = if current_creds.expiry.and_then(|expiry| expiry.elapsed().ok()).is_some() {
                 //If credentials expired, allow to refresh it
@@ -173,6 +173,8 @@ impl object_store::CredentialProvider for AwsCredentials {
                                 result
                             },
                             None => {
+                                #[cfg(feature = "tracing")]
+                                tracing::Span::current().record("exception.message", tracing::field::display(&error));
                                 return Err(object_store::Error::Generic {
                                     store: "S3",
                                     source: Box::new(error),
@@ -180,6 +182,8 @@ impl object_store::CredentialProvider for AwsCredentials {
                             }
                         },
                         Err(error) => {
+                            #[cfg(feature = "tracing")]
+                            tracing::Span::current().record("exception.message", tracing::field::display(&error));
                             return Err(object_store::Error::Generic {
                                 store: "S3",
                                 source: Box::new(error),
@@ -194,7 +198,11 @@ impl object_store::CredentialProvider for AwsCredentials {
             };
 
             Ok(creds)
-        })
+        };
+        #[cfg(feature = "tracing")]
+        let get_credential = tracing::Instrument::instrument(get_credential, tracing::info_span!("get_aws_credential", exception.message = tracing::field::Empty));
+
+        Box::pin(get_credential)
     }
 }
 

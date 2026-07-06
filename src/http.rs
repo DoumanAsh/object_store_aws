@@ -186,18 +186,31 @@ impl HttpService for AwsSmithyHttpClient {
     fn call<'life0, 'async_trait>(&'life0 self, req: HttpRequest) -> Pin<Box<dyn Future<Output = Result<HttpResponse, HttpError>> + Send + 'async_trait>> where Self: 'async_trait, 'life0: 'async_trait {
         use http_body_util::BodyExt;
         match aws_smithy_runtime_api::http::Request::try_from(req.map(|body| aws_smithy_types::body::SdkBody::from_body_1_x(body))) {
-            Ok(req) => Box::pin(async move {
-                let resp = AwsHttpConnector::call(&self.http, req).await;
-                let mut response = resp.map_err(|error| HttpError::new(HttpErrorKind::Connect, error)).and_then(|response| {
-                    response.try_into_http1x().map_err(|error| HttpError::new(HttpErrorKind::Decode, error))
-                })?;
+            Ok(req) => {
+                #[cfg(feature = "tracing")]
+                let span = tracing::info_span!("aws_smithy_http_call", http.request.method = req.method(), url.full = req.uri(), http.response.status_code = tracing::field::Empty);
 
-                let mut response_body = aws_smithy_types::body::SdkBody::empty();
-                mem::swap(response.body_mut(), &mut response_body);
+                let response = async move {
+                    let resp = AwsHttpConnector::call(&self.http, req).await;
+                    let mut response = resp.map_err(|error| HttpError::new(HttpErrorKind::Connect, error)).and_then(|response| {
+                        response.try_into_http1x().map_err(|error| HttpError::new(HttpErrorKind::Decode, error))
+                    })?;
 
-                let collected = response_body.collect().await.map_err(|error| HttpError::new(HttpErrorKind::Decode, BoxedError(error)))?;
-                Ok(response.map(|_| HttpResponseBody::from(collected.to_bytes())))
-            }),
+                    #[cfg(feature = "tracing")]
+                    tracing::Span::current().record("http.response.status_code", response.status().as_u16());
+
+                    let mut response_body = aws_smithy_types::body::SdkBody::empty();
+                    mem::swap(response.body_mut(), &mut response_body);
+
+                    let collected = response_body.collect().await.map_err(|error| HttpError::new(HttpErrorKind::Decode, BoxedError(error)))?;
+                    Ok(response.map(|_| HttpResponseBody::from(collected.to_bytes())))
+                };
+
+                #[cfg(feature = "tracing")]
+                let response = tracing::Instrument::instrument(response, span);
+
+                Box::pin(response)
+            },
             Err(error) => Box::pin(future::ready(Err(HttpError::new(HttpErrorKind::Request, error))))
         }
     }
@@ -291,4 +304,3 @@ impl ResolveEndpoint for DummyResolveEndpoint {
         Ok(())
     }
 }
-

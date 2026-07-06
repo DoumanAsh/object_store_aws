@@ -52,6 +52,11 @@ features = ["http-body-1-x"]
 version = "0.1"
 default-features = false
 
+[dependencies.tracing]
+version = "0.1"
+default-features = false
+optional = true
+
 [dev-dependencies.tokio]
 version = "1"
 features = ["rt", "macros"]
@@ -65,6 +70,7 @@ ring = ["aws-smithy-http-client/rustls-ring"]
 aws-lc = ["aws-smithy-http-client/rustls-aws-lc"]
 aws-lc-fips = ["aws-smithy-http-client/rustls-aws-lc-fips"]
 sso = ["aws-config/sso", "aws-config/credentials-login"]
+tracing = ["dep:tracing"]
 
 [lints.clippy]
 style = "allow"
