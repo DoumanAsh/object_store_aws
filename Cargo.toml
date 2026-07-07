@@ -1,6 +1,6 @@
 [package]
 name = "object_store_aws"
-version = "0.13.6"
+version = "0.13.7"
 edition = "2024"
 rust-version = "1.88"
 description = "Object store extension for AWS cloud"
@@ -11,7 +11,8 @@ keywords = ["object_store", "AWS"]
 include = [
     "**/*.rs",
     "Cargo.toml",
-    "README.md"
+    "README.md",
+    "LICENCSE"
 ]
 
 [dependencies.tokio]

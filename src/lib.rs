@@ -200,7 +200,7 @@ impl object_store::CredentialProvider for AwsCredentials {
             Ok(creds)
         };
         #[cfg(feature = "tracing")]
-        let get_credential = tracing::Instrument::instrument(get_credential, tracing::info_span!("get_aws_credential", exception.message = tracing::field::Empty));
+        let get_credential = tracing::Instrument::instrument(get_credential, tracing::debug_span!("get_aws_credential", exception.message = tracing::field::Empty));
 
         Box::pin(get_credential)
     }
