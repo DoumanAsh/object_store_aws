@@ -21,9 +21,9 @@ default-features = false
 features = ["sync"]
 
 [dependencies.object_store]
-version = "0.13"
+version = "0.14"
 default-features = false
-features = ["cloud", "aws"]
+features = ["aws-base"]
 
 [dependencies.aws-config]
 version = "1.8"
@@ -67,8 +67,8 @@ version = "1"
 features = ["test-util"]
 
 [features]
-ring = ["aws-smithy-http-client/rustls-ring"]
-aws-lc = ["aws-smithy-http-client/rustls-aws-lc"]
+ring = ["aws-smithy-http-client/rustls-ring", "object_store/ring"]
+aws-lc = ["aws-smithy-http-client/rustls-aws-lc", "object_store/aws-lc-rs"]
 aws-lc-fips = ["aws-smithy-http-client/rustls-aws-lc-fips"]
 sso = ["aws-config/sso", "aws-config/credentials-login"]
 tracing = ["dep:tracing"]
