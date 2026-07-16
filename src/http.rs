@@ -1,6 +1,6 @@
 //! HTTP client based on [aws-smithy-http-client](https://crates.io/crates/aws-smithy-http-client)
 
-use core::{fmt, mem, time};
+use core::{mem, time};
 use core::pin::Pin;
 use core::future::{self, Future};
 use std::borrow::Cow;
@@ -150,31 +150,6 @@ impl HttpConnector for AwsSmithyHttpConnector {
     }
 }
 
-//TODO: remove if https://github.com/apache/arrow-rs-object-store/pull/789 gets merged
-#[repr(transparent)]
-struct BoxedError(Box<dyn std::error::Error + Send + Sync>);
-
-impl fmt::Debug for BoxedError {
-    #[inline]
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(&self.0, fmt)
-    }
-}
-
-impl fmt::Display for BoxedError {
-    #[inline]
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.0, fmt)
-    }
-}
-
-impl std::error::Error for BoxedError {
-    #[inline(always)]
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.0.source()
-    }
-}
-
 #[derive(Clone, Debug)]
 ///AWS Smithy client implementing [HttpClient]
 pub struct AwsSmithyHttpClient {
@@ -202,7 +177,7 @@ impl HttpService for AwsSmithyHttpClient {
                     let mut response_body = aws_smithy_types::body::SdkBody::empty();
                     mem::swap(response.body_mut(), &mut response_body);
 
-                    let collected = response_body.collect().await.map_err(|error| HttpError::new(HttpErrorKind::Decode, BoxedError(error)))?;
+                    let collected = response_body.collect().await.map_err(|error| HttpError::new_boxed(HttpErrorKind::Decode, error))?;
                     Ok(response.map(|_| HttpResponseBody::from(collected.to_bytes())))
                 };
 
