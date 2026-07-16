@@ -72,6 +72,8 @@ aws-lc = ["aws-smithy-http-client/rustls-aws-lc", "object_store/aws-lc-rs"]
 aws-lc-fips = ["aws-smithy-http-client/rustls-aws-lc-fips"]
 sso = ["aws-config/sso", "aws-config/credentials-login"]
 tracing = ["dep:tracing"]
+http-builtin = ["object_store/aws"]
+fs = ["object_store/fs"]
 
 [lints.clippy]
 style = "allow"

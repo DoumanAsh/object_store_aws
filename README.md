@@ -14,6 +14,8 @@ It provides credentials source and optional HTTP client based on SDK's http clie
 - `ring` - Enables ring crypto backend for AWS HTTP client
 - `aws-lc` - Enables aws-lc crypto backend for AWS HTTP client
 - `aws-lc-fips` - Enables aws-lc FIPS friendly crypto backend for AWS HTTP client
+- `http-builtin` - Enables builtin HTTP client of [object_store](https://crates.io/crates/object_store) for use with AWS storage
+- `fs` - Enables builtin file system store of [object_store](https://crates.io/crates/object_store)
 
 ## Usage
 

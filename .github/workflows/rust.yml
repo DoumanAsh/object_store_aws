@@ -23,5 +23,5 @@ jobs:
     uses: DoumanAsh/douman-ci/.github/workflows/rust.yml@master
     with:
       min-rustc-version: "1.88.0"
-      cargo-features: "ring,aws-lc,aws-lc-fips"
+      cargo-features: "ring,aws-lc,aws-lc-fips,sso,tracing,fs,http-builtin"
       cargo-no-features: true
