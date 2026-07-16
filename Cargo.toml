@@ -1,13 +1,13 @@
 [package]
 name = "object_store_aws"
-version = "0.13.7"
+version = "0.14.0"
 edition = "2024"
 rust-version = "1.88"
 description = "Object store extension for AWS cloud"
 readme = "README.md"
 repository = "https://github.com/DoumanAsh/object_store_aws"
 license = "BSL-1.0"
-keywords = ["object_store", "AWS"]
+keywords = ["object_store", "object", "storage", "aws"]
 include = [
     "**/*.rs",
     "Cargo.toml",
